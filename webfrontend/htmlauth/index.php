@@ -6,7 +6,6 @@
 require_once "loxberry_system.php";
 require_once "loxberry_web.php";
 require_once "loxberry_log.php";
-require_once "loxberry_io.php";
 
 ##########################################################################
 # Variables
@@ -19,24 +18,11 @@ $logfile   = $lbplogdir . "/mbus2mqtt.log";
 $template  = $lbptemplatedir . "/settings.html";
 
 ##########################################################################
-# Get MQTT connection details from LoxBerry system
-##########################################################################
-
-$mqtt_creds = null;
-if ( function_exists('mqtt_connectiondetails') ) {
-    $mqtt_creds = mqtt_connectiondetails();
-}
-
-##########################################################################
 # Read / Init Config
 ##########################################################################
 
 $cfg_defaults = [
     'DEVICE'     => '/dev/ttyUSB0',
-    'MQTT_HOST'  => $mqtt_creds['brokerhost'] ?? 'localhost',
-    'MQTT_PORT'  => $mqtt_creds['brokerport'] ?? '1883',
-    'MQTT_USER'  => $mqtt_creds['brokeruser'] ?? '',
-    'MQTT_PASS'  => $mqtt_creds['brokerpass'] ?? '',
     'MQTT_TOPIC' => 'mbusmeters',
     'BAUD_300'   => '0',
     'BAUD_2400'  => '1',
@@ -48,9 +34,22 @@ if ( file_exists($cfgfile) ) {
     $raw = parse_ini_file($cfgfile, true);
     $section = isset($raw['MAIN']) ? $raw['MAIN'] : $raw;
     $pcfg = (array)$section;
+
+  $cfg_changed = false;
+  foreach (['MQTT_HOST', 'MQTT_PORT', 'MQTT_USER', 'MQTT_PASS'] as $deprecated_mqtt_key) {
+    if ( array_key_exists($deprecated_mqtt_key, $pcfg) ) {
+      unset($pcfg[$deprecated_mqtt_key]);
+      $cfg_changed = true;
+    }
+  }
+
     // Fill any missing keys with defaults
     foreach ($cfg_defaults as $k => $v) {
         if ( !array_key_exists($k, $pcfg) ) $pcfg[$k] = $v;
+    }
+
+    if ( $cfg_changed ) {
+      write_cfg($cfgfile, $pcfg);
     }
 } else {
     $pcfg = $cfg_defaults;
@@ -83,15 +82,13 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
         $old_interval = $pcfg['INTERVAL'];
 
         $pcfg['DEVICE']     = $_POST['DEVICE']     ?? '/dev/ttyUSB0';
-        $pcfg['MQTT_HOST']  = $_POST['MQTT_HOST']  ?? 'localhost';
-        $pcfg['MQTT_PORT']  = $_POST['MQTT_PORT']  ?? '1883';
-        $pcfg['MQTT_USER']  = $_POST['MQTT_USER']  ?? '';
-        $pcfg['MQTT_PASS']  = $_POST['MQTT_PASS']  ?? '';
         $pcfg['MQTT_TOPIC'] = $_POST['MQTT_TOPIC'] ?? 'mbusmeters';
         $pcfg['BAUD_300']   = !empty($_POST['BAUD_300'])  ? '1' : '0';
         $pcfg['BAUD_2400']  = !empty($_POST['BAUD_2400']) ? '1' : '0';
         $pcfg['BAUD_9600']  = !empty($_POST['BAUD_9600']) ? '1' : '0';
         $pcfg['INTERVAL']   = $_POST['INTERVAL']   ?? '5';
+
+      unset($pcfg['MQTT_HOST'], $pcfg['MQTT_PORT'], $pcfg['MQTT_USER'], $pcfg['MQTT_PASS']);
 
         if ( write_cfg($cfgfile, $pcfg) ) {
             $message = "Settings saved.";
@@ -103,17 +100,6 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
             $message_type = "error";
         }
 
-    } elseif ( $action === 'load_mqtt' ) {
-        $pcfg['MQTT_HOST'] = $mqtt_creds->brokerhost ?? 'localhost';
-        $pcfg['MQTT_PORT'] = $mqtt_creds->brokerport ?? '1883';
-        $pcfg['MQTT_USER'] = $mqtt_creds->brokeruser ?? '';
-        $pcfg['MQTT_PASS'] = $mqtt_creds->brokerpass ?? '';
-        if ( write_cfg($cfgfile, $pcfg) ) {
-            $message = "MQTT settings loaded from LoxBerry system.";
-        } else {
-            $message = "Error loading MQTT settings.";
-            $message_type = "error";
-        }
     } elseif ( $action === 'rescan' ) {
         foreach (['300', '2400', '9600'] as $baud) {
             $f = "$addrdir/addresses_$baud.txt";
@@ -238,25 +224,7 @@ LBWeb::lbheader("M-Bus to MQTT V$version", "", "");
 
 <h3>MQTT Settings</h3>
 
-<div class="ui-field-contain">
-  <label for="MQTT_HOST">Broker Host:</label>
-  <input type="text" name="MQTT_HOST" id="MQTT_HOST" value="<?= htmlspecialchars($pcfg['MQTT_HOST']) ?>" data-mini="true">
-</div>
-
-<div class="ui-field-contain">
-  <label for="MQTT_PORT">Broker Port:</label>
-  <input type="number" name="MQTT_PORT" id="MQTT_PORT" value="<?= htmlspecialchars($pcfg['MQTT_PORT']) ?>" min="1" max="65535" data-mini="true">
-</div>
-
-<div class="ui-field-contain">
-  <label for="MQTT_USER">Username:</label>
-  <input type="text" name="MQTT_USER" id="MQTT_USER" value="<?= htmlspecialchars($pcfg['MQTT_USER']) ?>" autocomplete="off" data-mini="true">
-</div>
-
-<div class="ui-field-contain">
-  <label for="MQTT_PASS">Password:</label>
-  <input type="password" name="MQTT_PASS" id="MQTT_PASS" value="<?= htmlspecialchars($pcfg['MQTT_PASS']) ?>" autocomplete="off" data-mini="true">
-</div>
+<p style="font-size:0.9em; color:#666; margin-top:0;">Broker host, port and credentials are always taken from LoxBerry MQTT Gateway global settings.</p>
 
 <div class="ui-field-contain">
   <label for="MQTT_TOPIC">Base Topic:</label>
@@ -265,12 +233,6 @@ LBWeb::lbheader("M-Bus to MQTT V$version", "", "");
 <p style="font-size:0.85em; color:#888; margin-top:0;">Data published to: <em>&lt;topic&gt;/&lt;meter-address&gt;</em></p>
 
 <input type="submit" value="Save Settings" data-mini="true" data-icon="check">
-</form>
-
-<form method="post" action="" style="margin-top:10px;">
-  <input type="hidden" name="action" value="load_mqtt">
-  <input type="submit" value="Load MQTT from LoxBerry" data-mini="true" data-icon="refresh" data-theme="b">
-  <span style="font-size:0.85em; color:#888;">&nbsp;Auto-fill broker settings from LoxBerry MQTT Gateway</span>
 </form>
 
 <br>
@@ -364,3 +326,4 @@ function update_cron_symlink($old, $new) {
     if ( file_exists($old_link) || is_link($old_link) ) unlink($old_link);
     symlink($script, $new_link);
 }
+

@@ -18,15 +18,31 @@ get_cfg() {
         | grep -i "^$1\s*=" | head -1 | cut -d'=' -f2- | tr -d '\r\n' | sed 's/^[[:space:]]*//' 
 }
 
+get_global_mqtt_cfg() {
+    LBHOME="$LBHOME" php -d display_errors=0 -d error_reporting=0 -r '
+        require_once getenv("LBHOME") . "/libs/phplib/loxberry_system.php";
+        require_once getenv("LBHOME") . "/libs/phplib/loxberry_io.php";
+        if (function_exists("mqtt_connectiondetails")) {
+            $cred = mqtt_connectiondetails();
+            echo ($cred["brokerhost"] ?? "") . PHP_EOL;
+            echo ($cred["brokerport"] ?? "") . PHP_EOL;
+            echo ($cred["brokeruser"] ?? "") . PHP_EOL;
+            echo ($cred["brokerpass"] ?? "") . PHP_EOL;
+        }
+    ' 2>/dev/null
+}
+
 DEVICE=$(get_cfg DEVICE)
-MQTT_HOST=$(get_cfg MQTT_HOST)
-MQTT_PORT=$(get_cfg MQTT_PORT)
-MQTT_USER=$(get_cfg MQTT_USER)
-MQTT_PASS=$(get_cfg MQTT_PASS)
 MQTT_TOPIC=$(get_cfg MQTT_TOPIC)
 BAUD_2400=$(get_cfg BAUD_2400)
 BAUD_9600=$(get_cfg BAUD_9600)
 BAUD_300=$(get_cfg BAUD_300)
+
+readarray -t MQTT_CREDS < <(get_global_mqtt_cfg)
+MQTT_HOST=${MQTT_CREDS[0]}
+MQTT_PORT=${MQTT_CREDS[1]}
+MQTT_USER=${MQTT_CREDS[2]}
+MQTT_PASS=${MQTT_CREDS[3]}
 
 # Defaults
 DEVICE=${DEVICE:-/dev/ttyUSB0}
@@ -89,7 +105,7 @@ mqtt_pub() {  # topic message
     local args=(-h "$MQTT_HOST" -p "$MQTT_PORT" -t "$topic" -m "$message")
     [ -n "$MQTT_USER" ] && args+=(-u "$MQTT_USER")
     [ -n "$MQTT_PASS" ] && args+=(-P "$MQTT_PASS")
-    /usr/bin/mosquitto_pub "${args[@]}"
+    /usr/bin/mosquitto_pub "${args[@]}" 2>&1
 }
 
 # ---------------------------------------------------------------
@@ -137,12 +153,13 @@ read_mbus_data() {
 
         if echo "$json" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if 'error' not in d else 1)" 2>/dev/null; then
             # Publish full JSON
-            mqtt_pub "$MQTT_TOPIC/$addr" "$json"
-            local bytes
-            bytes=$(echo "$json" | wc -c)
-            echo "$bytes bytes sent."
-            # Print summary
-            echo "$json" | python3 -c "
+            local pub_out
+            if pub_out=$(mqtt_pub "$MQTT_TOPIC/$addr" "$json"); then
+                local bytes
+                bytes=$(echo "$json" | wc -c)
+                echo "$bytes bytes sent."
+                # Print summary
+                echo "$json" | python3 -c "
 import sys, json
 d = json.load(sys.stdin).get('MBusData', {})
 si = d.get('SlaveInformation', {})
@@ -151,6 +168,9 @@ if isinstance(recs, dict): recs = [recs]
 print('    id={} manufacturer={} medium={} records={}'.format(
     si.get('Id','?'), si.get('Manufacturer','?'), si.get('Medium','?'), len(recs)))
 " 2>/dev/null
+            else
+                echo "MQTT publish failed to ${MQTT_HOST}:${MQTT_PORT} (topic $MQTT_TOPIC/$addr): ${pub_out:-unknown error}"
+            fi
         else
             echo "XML parse error: $json"
         fi
@@ -162,6 +182,7 @@ print('    id={} manufacturer={} medium={} records={}'.format(
 # Main
 # ---------------------------------------------------------------
 echo "===== M-Bus to MQTT ===== $(date)"
+echo "MQTT target: ${MQTT_HOST}:${MQTT_PORT} (user: ${MQTT_USER:-<none>})"
 
 if ! command -v mbus-serial-scan-secondary > /dev/null 2>&1; then
     echo "ERROR: mbus-serial-scan-secondary not found. Is libmbus installed?"
