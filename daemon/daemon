@@ -12,7 +12,7 @@
 
 if [ -x /usr/bin/logger ]
 then
-    /usr/bin/logger "This is just a sample DAEMON script from Sample Plugin"
+    /usr/bin/logger "mbus2mqtt plugin loaded"
 fi
 
 exit 0

@@ -43,6 +43,20 @@ PCONFIG=$LBPCONFIG/$PDIR
 PSBIN=$LBPSBIN/$PDIR
 PBIN=$LBPBIN/$PDIR
 
+# ---------------------------------------------------------------
+# Create initial cron symlink (default: every 5 minutes)
+# ---------------------------------------------------------------
+CRON_DIR="$LBHOMEDIR/system/cron/cron.05min"
+CRON_LINK="$CRON_DIR/99-mbus2mqtt"
+CRON_SCRIPT="$PBIN/mbus2mqtt_cronjob.sh"
+
+if [ ! -e "$CRON_LINK" ]; then
+    echo "<INFO> Creating cron symlink: $CRON_LINK -> $CRON_SCRIPT"
+    ln -sf "$CRON_SCRIPT" "$CRON_LINK"
+else
+    echo "<INFO> Cron symlink already exists, skipping."
+fi
+
 echo "<INFO> Command is: $COMMAND"
 echo "<INFO> Temporary folder is: $TEMPDIR"
 echo "<INFO> (Short) Name is: $PSHNAME"

@@ -57,5 +57,17 @@ echo "<INFO> Plugin CONFIG folder is: $PCONFIG"
 echo "<INFO> Plugin SBIN folder is: $PSBIN"
 echo "<INFO> Plugin BIN folder is: $PBIN"
 
+# ---------------------------------------------------------------
+# Remove cron symlinks from all interval folders
+# ---------------------------------------------------------------
+echo "<INFO> Removing cron symlinks..."
+for crondir in "$LBHOMEDIR"/system/cron/cron.*/; do
+    link="$crondir/99-mbus2mqtt"
+    if [ -L "$link" ] || [ -e "$link" ]; then
+        rm -f "$link"
+        echo "<INFO> Removed: $link"
+    fi
+done
+
 # Exit with Status 0
 exit 0

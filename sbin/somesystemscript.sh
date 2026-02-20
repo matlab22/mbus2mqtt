@@ -1,4 +1,4 @@
 #!/bin/bash
 
-# Can be executed with sudo as user "loxberry".
-echo "A script which can be executed with sudo as user loxberry."
+# mbus2mqtt - no sbin scripts required at this time.
+exit 0

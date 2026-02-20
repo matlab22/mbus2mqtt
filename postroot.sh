@@ -59,5 +59,30 @@ echo "<INFO> Plugin CONFIG folder is: $PCONFIG"
 echo "<INFO> Plugin SBIN folder is: $PSBIN"
 echo "<INFO> Plugin BIN folder is: $PBIN"
 
+# ---------------------------------------------------------------
+# Build and install libmbus from source
+# (required: libtool, autoconf already installed via apt/apt)
+# ---------------------------------------------------------------
+LIBMBUS_DIR="$PBIN/libmbus"
+
+if command -v mbus-serial-scan > /dev/null 2>&1; then
+    echo "<INFO> libmbus already installed, skipping build."
+else
+    echo "<INFO> Cloning libmbus..."
+    git clone https://github.com/rscada/libmbus.git "$LIBMBUS_DIR"
+    if [ $? -ne 0 ]; then
+        echo "<WARNING> git clone failed. libmbus not installed."
+    else
+        cd "$LIBMBUS_DIR" || exit 1
+        echo "<INFO> Building libmbus..."
+        ./build.sh && ./configure && make -j4 && make install && ldconfig
+        if [ $? -eq 0 ]; then
+            echo "<OK> libmbus built and installed successfully."
+        else
+            echo "<WARNING> libmbus build failed. Check build output above."
+        fi
+    fi
+fi
+
 # Exit with Status 0
 exit 0

@@ -1,0 +1,117 @@
+<!-- M-Bus to MQTT - Settings Template -->
+<!-- Used by webfrontend/htmlauth/index.cgi via HTML::Template -->
+
+<TMPL_IF MESSAGE>
+<div class="lb-alert lb-alert-<TMPL_VAR MESSAGE_TYPE>">
+    <TMPL_VAR MESSAGE>
+</div>
+</TMPL_IF>
+
+<form method="POST" action="">
+<input type="hidden" name="action" value="save">
+
+<div class="lb-form-section">
+  <h3>M-Bus Device</h3>
+
+  <div class="lb-form-row">
+    <div class="lb-form-label">Serial Device</div>
+    <div class="lb-form-content">
+      <select name="DEVICE">
+        <TMPL_LOOP DEV_OPTIONS>
+          <option value="<TMPL_VAR VALUE>"<TMPL_IF SELECTED> selected</TMPL_IF>><TMPL_VAR LABEL></option>
+        </TMPL_LOOP>
+      </select>
+      <div class="lb-form-desc">USB/UART M-Bus master adapter</div>
+    </div>
+  </div>
+
+  <div class="lb-form-row">
+    <div class="lb-form-label">Baud Rates</div>
+    <div class="lb-form-content">
+      <label><input type="checkbox" name="BAUD_300"  value="1"<TMPL_IF BAUD_300_CHECKED>  checked</TMPL_IF>> 300 baud</label>&nbsp;&nbsp;
+      <label><input type="checkbox" name="BAUD_2400" value="1"<TMPL_IF BAUD_2400_CHECKED> checked</TMPL_IF>> 2400 baud</label>&nbsp;&nbsp;
+      <label><input type="checkbox" name="BAUD_9600" value="1"<TMPL_IF BAUD_9600_CHECKED> checked</TMPL_IF>> 9600 baud</label>
+      <div class="lb-form-desc">Select all baud rates your meters use. A separate address cache is kept per rate.</div>
+    </div>
+  </div>
+
+  <div class="lb-form-row">
+    <div class="lb-form-label">Poll Interval</div>
+    <div class="lb-form-content">
+      <select name="INTERVAL">
+        <option value="1"<TMPL_VAR INTERVAL_1>>Every 1 minute</option>
+        <option value="3"<TMPL_VAR INTERVAL_3>>Every 3 minutes</option>
+        <option value="5"<TMPL_VAR INTERVAL_5>>Every 5 minutes</option>
+        <option value="10"<TMPL_VAR INTERVAL_10>>Every 10 minutes</option>
+        <option value="15"<TMPL_VAR INTERVAL_15>>Every 15 minutes</option>
+        <option value="30"<TMPL_VAR INTERVAL_30>>Every 30 minutes</option>
+        <option value="60"<TMPL_VAR INTERVAL_60>>Every 60 minutes</option>
+      </select>
+      <div class="lb-form-desc">Changing this moves the cron symlink automatically.</div>
+    </div>
+  </div>
+</div>
+
+<div class="lb-form-section">
+  <h3>MQTT Settings</h3>
+
+  <div class="lb-form-row">
+    <div class="lb-form-label">Broker Host</div>
+    <div class="lb-form-content">
+      <input type="text" name="MQTT_HOST" value="<TMPL_VAR MQTT_HOST>" size="30">
+      <div class="lb-form-desc">IP or hostname of your MQTT broker</div>
+    </div>
+  </div>
+
+  <div class="lb-form-row">
+    <div class="lb-form-label">Broker Port</div>
+    <div class="lb-form-content">
+      <input type="number" name="MQTT_PORT" value="<TMPL_VAR MQTT_PORT>" size="6" min="1" max="65535">
+    </div>
+  </div>
+
+  <div class="lb-form-row">
+    <div class="lb-form-label">Username</div>
+    <div class="lb-form-content">
+      <input type="text" name="MQTT_USER" value="<TMPL_VAR MQTT_USER>" size="30" autocomplete="off">
+      <div class="lb-form-desc">Leave blank for anonymous access</div>
+    </div>
+  </div>
+
+  <div class="lb-form-row">
+    <div class="lb-form-label">Password</div>
+    <div class="lb-form-content">
+      <input type="password" name="MQTT_PASS" value="<TMPL_VAR MQTT_PASS>" size="30" autocomplete="off">
+    </div>
+  </div>
+
+  <div class="lb-form-row">
+    <div class="lb-form-label">Base Topic</div>
+    <div class="lb-form-content">
+      <input type="text" name="MQTT_TOPIC" value="<TMPL_VAR MQTT_TOPIC>" size="30">
+      <div class="lb-form-desc">Data is published to <em>&lt;topic&gt;/&lt;meter-address&gt;</em></div>
+    </div>
+  </div>
+</div>
+
+<div class="lb-form-section">
+  <input type="submit" class="lb-button lb-button-primary" value="Save Settings">
+</div>
+
+</form>
+
+<!-- Rescan Button -->
+<form method="POST" action="" style="margin-top:10px;">
+  <input type="hidden" name="action" value="rescan">
+  <input type="submit" class="lb-button lb-button-warning"
+         value="Clear Address Cache (force rescan)"
+         onclick="return confirm('Delete cached M-Bus addresses? The next poll will scan the bus again.');">
+  <span class="lb-form-desc">&nbsp;Run this after adding or replacing meters.</span>
+</form>
+
+<!-- Log Viewer -->
+<div class="lb-form-section" style="margin-top:20px;">
+  <h3>Last Log Output</h3>
+  <pre style="background:#1a1a1a;color:#ddd;padding:10px;max-height:300px;overflow-y:auto;font-size:12px;"><TMPL_VAR LOG_CONTENT></pre>
+  <div class="lb-form-desc">Full log: <code>/opt/loxberry/log/plugins/mbus2mqtt/mbus2mqtt.log</code></div>
+</div>

@@ -1,8 +1,5 @@
-<html>
- <head>
-  <title>PHP-Test</title>
- </head>
- <body>
- <?php echo '<p>Hallo Welt</p>'; ?>
- </body>
-</html>
+<?php
+# Redirect unauthenticated visitors to the authenticated settings page
+header('Location: ../htmlauth/index.php');
+exit;
+?>

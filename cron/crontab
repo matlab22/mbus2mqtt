@@ -9,4 +9,6 @@ SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # m h dom mon dow user  command
-0   *  * * *   loxberry        echo "Do something funny" > /dev/null 2>&1
+# Scheduling is handled via LoxBerry cron symlinks in /opt/loxberry/system/cron/
+# The postinstall.sh places a symlink for mbus2mqtt_cronjob.sh in cron.05min by default.
+# The plugin UI (webfrontend/htmlauth/index.php) moves the symlink to change the interval.
