@@ -9,6 +9,6 @@ SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # m h dom mon dow user  command
-# Scheduling is handled via LoxBerry cron symlinks in /opt/loxberry/system/cron/
+# Scheduling is handled via LoxBerry cron symlinks in the system cron folders.
 # The postinstall.sh places a symlink for mbus2mqtt_cronjob.sh in cron.05min by default.
 # The plugin UI (webfrontend/htmlauth/index.php) moves the symlink to change the interval.

@@ -46,10 +46,10 @@ PSBIN=$LBPSBIN/$PDIR
 PBIN=$LBPBIN/$PDIR
 
 echo "<INFO> Command is: $COMMAND"
-echo "<INFO> Temporary folder is: $TEMPDIR"
+echo "<INFO> Temporary folder is: $PTEMPDIR"
 echo "<INFO> (Short) Name is: $PSHNAME"
-echo "<INFO> Installation folder is: $ARGV3"
-echo "<INFO> Plugin version is: $ARGV4"
+echo "<INFO> Installation folder is: $PDIR"
+echo "<INFO> Plugin version is: $PVERSION"
 echo "<INFO> Plugin CGI folder is: $PCGI"
 echo "<INFO> Plugin HTML folder is: $PHTML"
 echo "<INFO> Plugin Template folder is: $PTEMPL"
@@ -68,10 +68,22 @@ LIBMBUS_DIR="$PBIN/libmbus"
 if command -v mbus-serial-scan > /dev/null 2>&1; then
     echo "<INFO> libmbus already installed, skipping build."
 else
-    echo "<INFO> Cloning libmbus..."
-    git clone https://github.com/rscada/libmbus.git "$LIBMBUS_DIR"
-    if [ $? -ne 0 ]; then
-        echo "<WARNING> git clone failed. libmbus not installed."
+    if ! command -v libtoolize > /dev/null 2>&1; then
+        echo "<INFO> Installing missing build tools (libtoolize)..."
+        apt-get update && apt-get install -y libtool-bin libtool autoconf automake make gcc g++ pkg-config
+    fi
+
+    if [ -d "$LIBMBUS_DIR/.git" ]; then
+        echo "<INFO> Updating existing libmbus checkout..."
+        cd "$LIBMBUS_DIR" || exit 1
+        git pull --ff-only
+    else
+        echo "<INFO> Cloning libmbus..."
+        git clone https://github.com/rscada/libmbus.git "$LIBMBUS_DIR"
+    fi
+
+    if [ ! -d "$LIBMBUS_DIR" ]; then
+        echo "<WARNING> libmbus source not available. Build skipped."
     else
         cd "$LIBMBUS_DIR" || exit 1
         echo "<INFO> Building libmbus..."

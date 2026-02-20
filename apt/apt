@@ -4,6 +4,7 @@
 mosquitto-clients
 jq
 libtool
+libtool-bin
 autoconf
 python3
 git
