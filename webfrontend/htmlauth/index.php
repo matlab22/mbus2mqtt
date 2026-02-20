@@ -6,6 +6,7 @@
 require_once "loxberry_system.php";
 require_once "loxberry_web.php";
 require_once "loxberry_log.php";
+require_once "loxberry_io.php";
 
 ##########################################################################
 # Variables
@@ -18,15 +19,21 @@ $logfile   = $lbplogdir . "/mbus2mqtt.log";
 $template  = $lbptemplatedir . "/settings.html";
 
 ##########################################################################
+# Get MQTT connection details from LoxBerry system
+##########################################################################
+
+$mqtt_creds = mqtt_connectiondetails();
+
+##########################################################################
 # Read / Init Config
 ##########################################################################
 
 $cfg_defaults = [
     'DEVICE'     => '/dev/ttyUSB0',
-    'MQTT_HOST'  => 'localhost',
-    'MQTT_PORT'  => '1883',
-    'MQTT_USER'  => 'loxberry',
-    'MQTT_PASS'  => '',
+    'MQTT_HOST'  => $mqtt_creds->brokerhost ?? 'localhost',
+    'MQTT_PORT'  => $mqtt_creds->brokerport ?? '1883',
+    'MQTT_USER'  => $mqtt_creds->brokeruser ?? '',
+    'MQTT_PASS'  => $mqtt_creds->brokerpass ?? '',
     'MQTT_TOPIC' => 'mbusmeters',
     'BAUD_300'   => '0',
     'BAUD_2400'  => '1',
