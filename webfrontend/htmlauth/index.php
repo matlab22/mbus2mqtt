@@ -12,7 +12,7 @@ require_once "loxberry_log.php";
 ##########################################################################
 
 $version   = LBSystem::pluginversion();
-$cfgfile   = $lbpconfigdir . "/mbus2mqtt.cfg";
+$cfgfile   = $lbpconfigdir . "/pluginconfig.cfg";
 $addrdir   = $lbpconfigdir;
 $logfile   = $lbplogdir . "/mbus2mqtt.log";
 $template  = $lbptemplatedir . "/settings.html";
@@ -36,14 +36,15 @@ $cfg_defaults = [
 
 if ( file_exists($cfgfile) ) {
     $raw = parse_ini_file($cfgfile, true);
-    $cfg = isset($raw['MAIN']) ? $raw['MAIN'] : [];
+    $section = isset($raw['MAIN']) ? $raw['MAIN'] : $raw;
+    $pcfg = (array)$section;
     // Fill any missing keys with defaults
     foreach ($cfg_defaults as $k => $v) {
-        if ( !isset($cfg[$k]) ) $cfg[$k] = $v;
+        if ( !array_key_exists($k, $pcfg) ) $pcfg[$k] = $v;
     }
 } else {
-    $cfg = $cfg_defaults;
-    write_cfg($cfgfile, $cfg);
+    $pcfg = $cfg_defaults;
+    write_cfg($cfgfile, $pcfg);
 }
 
 ##########################################################################
@@ -69,23 +70,23 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
     $action = $_POST['action'] ?? '';
 
     if ( $action === 'save' ) {
-        $old_interval = $cfg['INTERVAL'];
+        $old_interval = $pcfg['INTERVAL'];
 
-        $cfg['DEVICE']     = $_POST['DEVICE']     ?? '/dev/ttyUSB0';
-        $cfg['MQTT_HOST']  = $_POST['MQTT_HOST']  ?? 'localhost';
-        $cfg['MQTT_PORT']  = $_POST['MQTT_PORT']  ?? '1883';
-        $cfg['MQTT_USER']  = $_POST['MQTT_USER']  ?? '';
-        $cfg['MQTT_PASS']  = $_POST['MQTT_PASS']  ?? '';
-        $cfg['MQTT_TOPIC'] = $_POST['MQTT_TOPIC'] ?? 'mbusmeters';
-        $cfg['BAUD_300']   = !empty($_POST['BAUD_300'])  ? '1' : '0';
-        $cfg['BAUD_2400']  = !empty($_POST['BAUD_2400']) ? '1' : '0';
-        $cfg['BAUD_9600']  = !empty($_POST['BAUD_9600']) ? '1' : '0';
-        $cfg['INTERVAL']   = $_POST['INTERVAL']   ?? '5';
+        $pcfg['DEVICE']     = $_POST['DEVICE']     ?? '/dev/ttyUSB0';
+        $pcfg['MQTT_HOST']  = $_POST['MQTT_HOST']  ?? 'localhost';
+        $pcfg['MQTT_PORT']  = $_POST['MQTT_PORT']  ?? '1883';
+        $pcfg['MQTT_USER']  = $_POST['MQTT_USER']  ?? '';
+        $pcfg['MQTT_PASS']  = $_POST['MQTT_PASS']  ?? '';
+        $pcfg['MQTT_TOPIC'] = $_POST['MQTT_TOPIC'] ?? 'mbusmeters';
+        $pcfg['BAUD_300']   = !empty($_POST['BAUD_300'])  ? '1' : '0';
+        $pcfg['BAUD_2400']  = !empty($_POST['BAUD_2400']) ? '1' : '0';
+        $pcfg['BAUD_9600']  = !empty($_POST['BAUD_9600']) ? '1' : '0';
+        $pcfg['INTERVAL']   = $_POST['INTERVAL']   ?? '5';
 
-        if ( write_cfg($cfgfile, $cfg) ) {
+        if ( write_cfg($cfgfile, $pcfg) ) {
             $message = "Settings saved.";
-            if ( $old_interval !== $cfg['INTERVAL'] ) {
-                update_cron_symlink($old_interval, $cfg['INTERVAL']);
+            if ( $old_interval !== $pcfg['INTERVAL'] ) {
+                update_cron_symlink($old_interval, $pcfg['INTERVAL']);
             }
         } else {
             $message      = "Error saving config.";
@@ -105,6 +106,12 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
             $message = "Could not clear log.";
             $message_type = "error";
         }
+    } elseif ( $action === 'pollnow' ) {
+        $script = escapeshellarg("$lbhomedir/bin/plugins/mbus2mqtt/read_send_meters_mqtt.sh");
+        $logarg = escapeshellarg($logfile);
+        exec("nohup bash $script >> $logarg 2>&1 &");
+        $message = "Poll triggered — check the log in a few seconds.";
+        $refresh_seconds = 5;
     }
 }
 
@@ -119,7 +126,7 @@ $serial_devices = array_merge(
 );
 sort($serial_devices);
 
-$current_device = $cfg['DEVICE'];
+$current_device = $pcfg['DEVICE'];
 $dev_options = [];
 foreach ($serial_devices as $d) {
     $dev_options[] = [
@@ -153,8 +160,8 @@ if ( file_exists($logfile) ) {
 # Interval selected helper
 ##########################################################################
 
-function interval_sel($cfg, $val) {
-    return ($cfg['INTERVAL'] === $val) ? ' selected' : '';
+function interval_sel($pcfg, $val) {
+    return ($pcfg['INTERVAL'] === $val) ? ' selected' : '';
 }
 
 ##########################################################################
@@ -164,100 +171,125 @@ function interval_sel($cfg, $val) {
 LBWeb::lbheader("M-Bus to MQTT V$version", "", "");
 
 ?>
-<form method="post" action="">
+
+<?php if ($message): ?>
+<div style="padding:0.6em 1em; margin-bottom:0.8em; border-radius:4px; background:<?= $message_type === 'error' ? '#c00' : '#2a2' ?>; color:#fff; font-weight:bold;">
+  <?= htmlspecialchars($message) ?>
+</div>
+<?php endif; ?>
+
+<form method="post" action="" id="settingsform">
 <input type="hidden" name="action" value="save">
 
-<div class="lbform">
-  <h3>Serial Device</h3>
-  <label>M-Bus Device:</label>
-  <select name="DEVICE">
+<h3>M-Bus Device</h3>
+
+<div class="ui-field-contain">
+  <label for="DEVICE">Serial Device:</label>
+  <select name="DEVICE" id="DEVICE" data-mini="true">
     <?php foreach ($dev_options as $opt): ?>
     <option value="<?= $opt['VALUE'] ?>"<?= $opt['SELECTED'] ?>><?= $opt['LABEL'] ?></option>
     <?php endforeach; ?>
   </select>
-
-  <h3>MQTT Settings</h3>
-  <label>MQTT Host:</label>
-  <input type="text" name="MQTT_HOST" value="<?= htmlspecialchars($cfg['MQTT_HOST']) ?>">
-
-  <label>MQTT Port:</label>
-  <input type="text" name="MQTT_PORT" value="<?= htmlspecialchars($cfg['MQTT_PORT']) ?>">
-
-  <label>MQTT User:</label>
-  <input type="text" name="MQTT_USER" value="<?= htmlspecialchars($cfg['MQTT_USER']) ?>">
-
-  <label>MQTT Password:</label>
-  <input type="password" name="MQTT_PASS" value="<?= htmlspecialchars($cfg['MQTT_PASS']) ?>">
-
-  <label>MQTT Topic:</label>
-  <input type="text" name="MQTT_TOPIC" value="<?= htmlspecialchars($cfg['MQTT_TOPIC']) ?>">
-
-  <h3>Baud Rates to scan</h3>
-  <label><input type="checkbox" name="BAUD_300"  <?= $cfg['BAUD_300']  === '1' ? 'checked' : '' ?>> 300 baud</label>
-  <label><input type="checkbox" name="BAUD_2400" <?= $cfg['BAUD_2400'] === '1' ? 'checked' : '' ?>> 2400 baud</label>
-  <label><input type="checkbox" name="BAUD_9600" <?= $cfg['BAUD_9600'] === '1' ? 'checked' : '' ?>> 9600 baud</label>
-
-  <h3>Poll Interval</h3>
-  <label>Interval (minutes):</label>
-  <select name="INTERVAL">
-    <option value="1" <?= interval_sel($cfg,'1') ?>>1 min</option>
-    <option value="3" <?= interval_sel($cfg,'3') ?>>3 min</option>
-    <option value="5" <?= interval_sel($cfg,'5') ?>>5 min</option>
-    <option value="10"<?= interval_sel($cfg,'10') ?>>10 min</option>
-    <option value="15"<?= interval_sel($cfg,'15') ?>>15 min</option>
-    <option value="30"<?= interval_sel($cfg,'30') ?>>30 min</option>
-    <option value="60"<?= interval_sel($cfg,'60') ?>>60 min (hourly)</option>
-  </select>
-
-  <?php if ($message): ?>
-  <div class="lbmessage <?= htmlspecialchars($message_type) ?>"><?= htmlspecialchars($message) ?></div>
-  <?php endif; ?>
-
-  <button type="submit">Save Settings</button>
 </div>
+
+<fieldset data-role="controlgroup" data-type="horizontal" data-mini="true">
+  <legend>Baud Rates to scan:</legend>
+  <input type="checkbox" name="BAUD_300"  id="BAUD_300"  value="1" <?= $pcfg['BAUD_300']  === '1' ? 'checked' : '' ?>>
+  <label for="BAUD_300">300</label>
+  <input type="checkbox" name="BAUD_2400" id="BAUD_2400" value="1" <?= $pcfg['BAUD_2400'] === '1' ? 'checked' : '' ?>>
+  <label for="BAUD_2400">2400</label>
+  <input type="checkbox" name="BAUD_9600" id="BAUD_9600" value="1" <?= $pcfg['BAUD_9600'] === '1' ? 'checked' : '' ?>>
+  <label for="BAUD_9600">9600</label>
+</fieldset>
+
+<div class="ui-field-contain">
+  <label for="INTERVAL">Poll Interval:</label>
+  <select name="INTERVAL" id="INTERVAL" data-mini="true">
+    <option value="1"  <?= interval_sel($pcfg,'1')  ?>>Every 1 minute</option>
+    <option value="3"  <?= interval_sel($pcfg,'3')  ?>>Every 3 minutes</option>
+    <option value="5"  <?= interval_sel($pcfg,'5')  ?>>Every 5 minutes</option>
+    <option value="10" <?= interval_sel($pcfg,'10') ?>>Every 10 minutes</option>
+    <option value="15" <?= interval_sel($pcfg,'15') ?>>Every 15 minutes</option>
+    <option value="30" <?= interval_sel($pcfg,'30') ?>>Every 30 minutes</option>
+    <option value="60" <?= interval_sel($pcfg,'60') ?>>Every 60 minutes (hourly)</option>
+  </select>
+</div>
+
+<h3>MQTT Settings</h3>
+
+<div class="ui-field-contain">
+  <label for="MQTT_HOST">Broker Host:</label>
+  <input type="text" name="MQTT_HOST" id="MQTT_HOST" value="<?= htmlspecialchars($pcfg['MQTT_HOST']) ?>" data-mini="true">
+</div>
+
+<div class="ui-field-contain">
+  <label for="MQTT_PORT">Broker Port:</label>
+  <input type="number" name="MQTT_PORT" id="MQTT_PORT" value="<?= htmlspecialchars($pcfg['MQTT_PORT']) ?>" min="1" max="65535" data-mini="true">
+</div>
+
+<div class="ui-field-contain">
+  <label for="MQTT_USER">Username:</label>
+  <input type="text" name="MQTT_USER" id="MQTT_USER" value="<?= htmlspecialchars($pcfg['MQTT_USER']) ?>" autocomplete="off" data-mini="true">
+</div>
+
+<div class="ui-field-contain">
+  <label for="MQTT_PASS">Password:</label>
+  <input type="password" name="MQTT_PASS" id="MQTT_PASS" value="<?= htmlspecialchars($pcfg['MQTT_PASS']) ?>" autocomplete="off" data-mini="true">
+</div>
+
+<div class="ui-field-contain">
+  <label for="MQTT_TOPIC">Base Topic:</label>
+  <input type="text" name="MQTT_TOPIC" id="MQTT_TOPIC" value="<?= htmlspecialchars($pcfg['MQTT_TOPIC']) ?>" data-mini="true">
+</div>
+<p style="font-size:0.85em; color:#888; margin-top:0;">Data published to: <em>&lt;topic&gt;/&lt;meter-address&gt;</em></p>
+
+<input type="submit" value="Save Settings" data-mini="true" data-icon="check">
 </form>
 
-<form method="post" action="" style="margin-top:1em;">
+<br>
+
+<form method="post" action="">
+  <input type="hidden" name="action" value="pollnow">
+  <input type="submit" value="Poll Now" data-mini="true" data-icon="arrow-r" data-theme="b">
+</form>
+
+<form method="post" action="">
   <input type="hidden" name="action" value="rescan">
-  <button type="submit">Clear Address Cache &amp; Rescan</button>
+  <input type="submit" value="Clear Address Cache &amp; Force Rescan" data-mini="true" data-icon="refresh" data-theme="b">
 </form>
 
 <h3>Log</h3>
-<form method="get" action="" style="margin:1em 0; display:flex; gap:1em; align-items:center; flex-wrap:wrap;">
-    <label>
-        Lines:
-        <select name="loglines">
-            <option value="40" <?= $log_lines === 40 ? 'selected' : '' ?>>40</option>
-            <option value="100" <?= $log_lines === 100 ? 'selected' : '' ?>>100</option>
-            <option value="200" <?= $log_lines === 200 ? 'selected' : '' ?>>200</option>
-        </select>
-    </label>
-    <label>
-        Auto-refresh:
-        <select name="refresh">
-            <option value="0" <?= $refresh_seconds === 0 ? 'selected' : '' ?>>Off</option>
-            <option value="5" <?= $refresh_seconds === 5 ? 'selected' : '' ?>>5s</option>
-            <option value="10" <?= $refresh_seconds === 10 ? 'selected' : '' ?>>10s</option>
-            <option value="30" <?= $refresh_seconds === 30 ? 'selected' : '' ?>>30s</option>
-        </select>
-    </label>
-    <button type="submit">Apply</button>
+
+<form method="get" action="">
+  <div class="ui-field-contain">
+    <label for="loglines">Lines:</label>
+    <select name="loglines" id="loglines" data-mini="true">
+      <option value="40"  <?= $log_lines === 40  ? 'selected' : '' ?>>40</option>
+      <option value="100" <?= $log_lines === 100 ? 'selected' : '' ?>>100</option>
+      <option value="200" <?= $log_lines === 200 ? 'selected' : '' ?>>200</option>
+    </select>
+  </div>
+  <div class="ui-field-contain">
+    <label for="refresh">Auto-refresh:</label>
+    <select name="refresh" id="refresh" data-mini="true">
+      <option value="0"  <?= $refresh_seconds === 0  ? 'selected' : '' ?>>Off</option>
+      <option value="5"  <?= $refresh_seconds === 5  ? 'selected' : '' ?>>5s</option>
+      <option value="10" <?= $refresh_seconds === 10 ? 'selected' : '' ?>>10s</option>
+      <option value="30" <?= $refresh_seconds === 30 ? 'selected' : '' ?>>30s</option>
+    </select>
+  </div>
+  <input type="submit" value="Apply" data-mini="true" data-inline="true">
 </form>
 
-<form method="post" action="" style="margin-bottom:1em;">
-    <input type="hidden" name="action" value="clearlog">
-    <button type="submit" onclick="return confirm('Clear the plugin log file?');">Clear Log</button>
+<form method="post" action="" style="margin:0.5em 0;">
+  <input type="hidden" name="action" value="clearlog">
+  <input type="submit" value="Clear Log" data-mini="true" data-inline="true" data-icon="delete" data-theme="b">
 </form>
 
-<h4>Last <?= (int)$log_lines ?> lines</h4>
-<pre style="background:#111;color:#eee;padding:1em;overflow:auto;max-height:400px;"><?= $log_content ?></pre>
+<pre style="background:#111;color:#eee;padding:0.8em;overflow:auto;max-height:400px;font-size:0.8em;border-radius:4px;"><?= $log_content ?></pre>
 
 <?php if ( $refresh_seconds > 0 ): ?>
-<script>
-setTimeout(function () {
-    window.location.reload();
-}, <?= (int)$refresh_seconds * 1000 ?>);
-</script>
+<script>setTimeout(function(){window.location.reload();},<?= (int)$refresh_seconds * 1000 ?>);</script>
 <?php endif; ?>
 
 <?php
@@ -268,9 +300,9 @@ LBWeb::lbfooter();
 # Helper: write INI-style config file
 ##########################################################################
 
-function write_cfg($file, $cfg) {
+function write_cfg($file, $pcfg) {
     $content = "[MAIN]\n";
-    foreach ($cfg as $k => $v) {
+    foreach ($pcfg as $k => $v) {
         $content .= "$k = $v\n";
     }
     return file_put_contents($file, $content) !== false;

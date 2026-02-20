@@ -39,11 +39,13 @@ LOGDIR="$LBHOME/log/plugins/mbus2mqtt"
 mkdir -p "$ADDRDIR" "$LOGDIR"
 
 # ---------------------------------------------------------------
-# Python3 helper: XML (mbus output) → JSON
-# No external packages required.
+# Write Python XML→JSON converter to a temp file once at startup
+# (avoids stdin conflict with bash heredoc)
 # ---------------------------------------------------------------
-xml_to_json() {
-python3 - "$1" <<'PYEOF'
+PYTHON_SCRIPT=$(mktemp /tmp/mbus2mqtt_XXXXXX.py)
+trap "rm -f '$PYTHON_SCRIPT'" EXIT
+
+cat > "$PYTHON_SCRIPT" << 'PYEOF'
 import sys, xml.etree.ElementTree as ET, json
 
 def elem_to_dict(el):
@@ -71,18 +73,17 @@ def elem_to_dict(el):
     return d
 
 try:
-    xml_input = sys.stdin.read() if sys.argv[1] == "-" else open(sys.argv[1]).read()
+    xml_input = open(sys.argv[1]).read()
     root = ET.fromstring(xml_input)
     print(json.dumps({root.tag: elem_to_dict(root)}, indent=2))
 except Exception as e:
     print(json.dumps({"error": str(e)}))
 PYEOF
-}
 
 # ---------------------------------------------------------------
 # MQTT publish helper
 # ---------------------------------------------------------------
-mqtt_pub() {
+mqtt_pub() {  # topic message
     local topic=$1
     local message=$2
     local args=(-h "$MQTT_HOST" -p "$MQTT_PORT" -t "$topic" -m "$message")
@@ -104,10 +105,12 @@ read_mbus_data() {
     # Auto-scan if address file missing or empty
     if [ ! -s "$addrfile" ]; then
         echo "Scanning for M-Bus devices at $baud baud on $DEVICE ..."
+        # Filter out wildcard mask addresses (e.g. 20FFFFFFFFFFFFFF)
         mbus-serial-scan-secondary -b "$baud" "$DEVICE" \
-            | grep -oE '[0-9A-Fa-f]{16}' > "$addrfile"
+            | grep -oE '[0-9A-Fa-f]{16}' \
+            | grep -vE 'F{8,}' > "$addrfile"
         local count
-        count=$(wc -l < "$addrfile" 2>/dev/null)
+        count=$(grep -c . "$addrfile" 2>/dev/null || echo 0)
         echo "Found $count device(s)."
     fi
 
@@ -125,23 +128,32 @@ read_mbus_data() {
             continue
         fi
 
-        # Convert XML to JSON
-        local json
-        json=$(echo "$xml" | xml_to_json -)
+        # Convert XML to JSON via temp file (avoids stdin conflicts)
+        local tmpxml json
+        tmpxml=$(mktemp /tmp/mbus_xml_XXXXXX.xml)
+        echo "$xml" > "$tmpxml"
+        json=$(python3 "$PYTHON_SCRIPT" "$tmpxml")
+        rm -f "$tmpxml"
 
-        # Publish full JSON
-        mqtt_pub "$MQTT_TOPIC/$addr" "$json"
-
-        local bytes
-        bytes=$(echo "$json" | wc -c)
-        echo "$bytes bytes sent."
-
-        # Also publish a summary topic
-        local id manufacturer medium
-        id=$(echo "$json"        | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('MBusData',{}).get('SlaveInformation',{}).get('Id',''))" 2>/dev/null)
-        manufacturer=$(echo "$json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('MBusData',{}).get('SlaveInformation',{}).get('Manufacturer',''))" 2>/dev/null)
-        medium=$(echo "$json"    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('MBusData',{}).get('SlaveInformation',{}).get('Medium',''))" 2>/dev/null)
-        echo "    id=$id  manufacturer=$manufacturer  medium=$medium"
+        if echo "$json" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if 'error' not in d else 1)" 2>/dev/null; then
+            # Publish full JSON
+            mqtt_pub "$MQTT_TOPIC/$addr" "$json"
+            local bytes
+            bytes=$(echo "$json" | wc -c)
+            echo "$bytes bytes sent."
+            # Print summary
+            echo "$json" | python3 -c "
+import sys, json
+d = json.load(sys.stdin).get('MBusData', {})
+si = d.get('SlaveInformation', {})
+recs = d.get('DataRecord', [])
+if isinstance(recs, dict): recs = [recs]
+print('    id={} manufacturer={} medium={} records={}'.format(
+    si.get('Id','?'), si.get('Manufacturer','?'), si.get('Medium','?'), len(recs)))
+" 2>/dev/null
+        else
+            echo "XML parse error: $json"
+        fi
 
     done < "$addrfile"
 }
