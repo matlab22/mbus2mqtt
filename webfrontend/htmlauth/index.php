@@ -22,7 +22,10 @@ $template  = $lbptemplatedir . "/settings.html";
 # Get MQTT connection details from LoxBerry system
 ##########################################################################
 
-$mqtt_creds = mqtt_connectiondetails();
+$mqtt_creds = null;
+if ( function_exists('mqtt_connectiondetails') ) {
+    $mqtt_creds = mqtt_connectiondetails();
+}
 
 ##########################################################################
 # Read / Init Config
@@ -30,10 +33,10 @@ $mqtt_creds = mqtt_connectiondetails();
 
 $cfg_defaults = [
     'DEVICE'     => '/dev/ttyUSB0',
-    'MQTT_HOST'  => $mqtt_creds->brokerhost ?? 'localhost',
-    'MQTT_PORT'  => $mqtt_creds->brokerport ?? '1883',
-    'MQTT_USER'  => $mqtt_creds->brokeruser ?? '',
-    'MQTT_PASS'  => $mqtt_creds->brokerpass ?? '',
+    'MQTT_HOST'  => $mqtt_creds['brokerhost'] ?? 'localhost',
+    'MQTT_PORT'  => $mqtt_creds['brokerport'] ?? '1883',
+    'MQTT_USER'  => $mqtt_creds['brokeruser'] ?? '',
+    'MQTT_PASS'  => $mqtt_creds['brokerpass'] ?? '',
     'MQTT_TOPIC' => 'mbusmeters',
     'BAUD_300'   => '0',
     'BAUD_2400'  => '1',
@@ -100,6 +103,17 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
             $message_type = "error";
         }
 
+    } elseif ( $action === 'load_mqtt' ) {
+        $pcfg['MQTT_HOST'] = $mqtt_creds->brokerhost ?? 'localhost';
+        $pcfg['MQTT_PORT'] = $mqtt_creds->brokerport ?? '1883';
+        $pcfg['MQTT_USER'] = $mqtt_creds->brokeruser ?? '';
+        $pcfg['MQTT_PASS'] = $mqtt_creds->brokerpass ?? '';
+        if ( write_cfg($cfgfile, $pcfg) ) {
+            $message = "MQTT settings loaded from LoxBerry system.";
+        } else {
+            $message = "Error loading MQTT settings.";
+            $message_type = "error";
+        }
     } elseif ( $action === 'rescan' ) {
         foreach (['300', '2400', '9600'] as $baud) {
             $f = "$addrdir/addresses_$baud.txt";
@@ -251,6 +265,12 @@ LBWeb::lbheader("M-Bus to MQTT V$version", "", "");
 <p style="font-size:0.85em; color:#888; margin-top:0;">Data published to: <em>&lt;topic&gt;/&lt;meter-address&gt;</em></p>
 
 <input type="submit" value="Save Settings" data-mini="true" data-icon="check">
+</form>
+
+<form method="post" action="" style="margin-top:10px;">
+  <input type="hidden" name="action" value="load_mqtt">
+  <input type="submit" value="Load MQTT from LoxBerry" data-mini="true" data-icon="refresh" data-theme="b">
+  <span style="font-size:0.85em; color:#888;">&nbsp;Auto-fill broker settings from LoxBerry MQTT Gateway</span>
 </form>
 
 <br>
