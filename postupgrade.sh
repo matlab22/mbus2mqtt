@@ -45,6 +45,19 @@ PCONFIG=$LBPCONFIG/$PDIR
 PSBIN=$LBPSBIN/$PDIR
 PBIN=$LBPBIN/$PDIR
 
+# ---------------------------------------------------------------
+# Restore config saved by preupgrade.sh
+# ---------------------------------------------------------------
+BAK="/tmp/mbus2mqtt_pluginconfig.cfg.bak"
+CFGFILE="$PCONFIG/pluginconfig.cfg"
+if [ -f "$BAK" ]; then
+    cp "$BAK" "$CFGFILE"
+    rm -f "$BAK"
+    echo "<INFO> Config restored from backup."
+else
+    echo "<INFO> No config backup found, keeping defaults."
+fi
+
 echo "<INFO> Command is: $COMMAND"
 echo "<INFO> Temporary folder is: $TEMPDIR"
 echo "<INFO> (Short) Name is: $PSHNAME"

@@ -45,6 +45,17 @@ PCONFIG=$LBPCONFIG/$PDIR
 PSBIN=$LBPSBIN/$PDIR
 PBIN=$LBPBIN/$PDIR
 
+# ---------------------------------------------------------------
+# Save existing config before update overwrites it
+# ---------------------------------------------------------------
+CFGFILE="$PCONFIG/pluginconfig.cfg"
+if [ -f "$CFGFILE" ]; then
+    cp "$CFGFILE" /tmp/mbus2mqtt_pluginconfig.cfg.bak
+    echo "<INFO> Config backed up to /tmp/mbus2mqtt_pluginconfig.cfg.bak"
+else
+    echo "<INFO> No existing config found, skipping backup."
+fi
+
 echo "<INFO> Command is: $COMMAND"
 echo "<INFO> Temporary folder is: $TEMPDIR"
 echo "<INFO> (Short) Name is: $PSHNAME"
