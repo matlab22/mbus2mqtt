@@ -4,10 +4,10 @@
 # Reads data from M-Bus meters and publishes JSON to MQTT.
 
 # ---------------------------------------------------------------
-# Resolve plugin folder (REPLACELBPBINDIR is replaced on install)
+# Resolve plugin folder (/opt/loxberry/bin/plugins/mbus2mqtt is replaced on install)
 # ---------------------------------------------------------------
 LBHOME=${LBHOMEDIR:-/opt/loxberry}
-CFGFILE="$LBHOME/config/plugins/mbus2mqtt/mbus2mqtt.cfg"
+CFGFILE="$LBHOME/config/plugins/mbus2mqtt/pluginconfig.cfg"
 
 # ---------------------------------------------------------------
 # Parse INI config (bash-native, no external parser needed)
